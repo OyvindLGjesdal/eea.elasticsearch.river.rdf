@@ -36,15 +36,9 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.NoSuchElementException;
 import java.util.Date;
-import java.lang.StringBuffer;
-import java.lang.Exception;
-import java.lang.Integer;
-import java.lang.Byte;
 import java.text.SimpleDateFormat;
 import java.io.IOException;
-
-import javax.xml.ws.Endpoint;
-import javax.xml.ws.http.HTTPException;
+import org.elasticsearch.action.bulk.BulkItemResponse;
 
 /**
  *
@@ -89,6 +83,10 @@ public class Harvester implements Runnable {
 	private String typeName;
 
 	private Boolean closed = false;
+        private long numberOfBulkActions;
+        
+        private final int DEFAULT_NUMBER_OF_RETRY = 5;
+        
 
 	/**
  	 * Sets the {@link #Harvester}'s {@link #rdfUrls} parameter
@@ -111,6 +109,16 @@ public class Harvester implements Runnable {
 		this.rdfEndpoint = endpoint;
 		return this;
 	}
+        
+        /**
+       * @param bulkActions
+       * @return this object with numberOfBulkActions parameter set
+       **/
+        public Harvester rdfNumberOfBulkActions(long bulkActions)
+        {
+           this.numberOfBulkActions = bulkActions;
+           return this;
+        }
 
 	/**
 	 * Sets the {@link #Harvester}'s {@link #rdfQuery} parameter
@@ -325,6 +333,13 @@ public class Harvester implements Runnable {
 		if(!uriList.isEmpty())
 			toDescribeURIs = true;
 		uriDescriptionList = Arrays.asList(uriList.split(","));
+		return this;
+	}
+         
+           public Harvester rdfURIDescription(List<String> uriList) {
+		if(!uriList.isEmpty())
+			toDescribeURIs = true;
+		uriDescriptionList = new ArrayList<String>(uriList);
 		return this;
 	}
 
@@ -682,7 +697,9 @@ public class Harvester implements Runnable {
 			/**
 			 * Harvest from RDF dumps
 			 */
-			harvestFromDumps();
+                        if(!rdfUrls.isEmpty()){
+			   harvestFromDumps();
+                        }
 
 			closed = true;
 		}
@@ -696,7 +713,7 @@ public class Harvester implements Runnable {
  	 */
 	private void harvestWithSelect(QueryExecution qexec) {
 		Model sparqlModel = ModelFactory.createDefaultModel();
-		Graph graph = sparqlModel.getGraph();
+		Graph graph = sparqlModel.getGraph();                     
 		boolean got500 = true;
 
 		while(got500) {
@@ -850,9 +867,11 @@ public class Harvester implements Runnable {
 	 * @param model the model to index
 	 * @param bulkRequest a BulkRequestBuilder
 	 */
-	private void addModelToES(Model model, BulkRequestBuilder bulkRequest) {
+	private void addModelToES(Model model, BulkRequestBuilder bulkRequest) {       
+                long startTime = System.currentTimeMillis(); 
+                long bulkLength = 0;
 		HashSet<Property> properties = new HashSet<Property>();
-
+            
 		StmtIterator iter = model.listStatements();
 
 		while(iter.hasNext()) {
@@ -870,11 +889,11 @@ public class Harvester implements Runnable {
 
 		ResIterator rsiter = model.listSubjects();
 
-		while(rsiter.hasNext()){
+		while(rsiter.hasNext())
+                {
 
 			Resource rs = rsiter.nextResource();
-			Map<String, ArrayList<String>> jsonMap = new HashMap<String,
-				ArrayList<String>>();
+			Map<String, ArrayList<String>> jsonMap = new HashMap<String, ArrayList<String>>();
 			ArrayList<String> results = new ArrayList<String>();
 			if(addUriForResource) {
 				results.add("\"" + rs.toString() + "\"");
@@ -965,9 +984,73 @@ public class Harvester implements Runnable {
 			bulkRequest.add(client.prepareIndex(indexName, typeName,
 							rs.toString())
 				.setSource(mapToString(jsonMap)));
-			BulkResponse bulkResponse = bulkRequest.execute().actionGet();
-		}
-	}
+                         bulkLength++;  
+                         
+                         
+                        
+                        //We want to execute the bulk for every numberOfBulkActions requests
+                        if(bulkLength % numberOfBulkActions == 0) 
+                        {  
+                          //logger.info("Now Indexing: " + bulkLength + " documents.");
+                           BulkResponse bulkResponse = bulkRequest.execute().actionGet();
+
+                           //After executing, flush the BulkRequestBuilder.
+                           //This ensures that you do not index the same data again and again
+                           bulkRequest = client.prepareBulk();
+
+                           if(bulkResponse.hasFailures())
+                           {
+                             processFailure(bulkResponse);
+                           }
+                        }
+                    
+		  }
+                   
+                     //Execute the remaining requests
+                     if(bulkRequest.numberOfActions() > 0)
+                     {
+                        BulkResponse response = bulkRequest.execute().actionGet();
+                        
+                        //Handle failure by iterating through each bulk response item
+                        if(response.hasFailures())
+                        {
+                           processFailure(response);
+                        }
+                     
+                     }
+                     
+                    //Show time taken to index the documents 
+                   logger.info("\n==========================================="
+                              +"\n\tTotal documents indexed: " + bulkLength
+                              + "\n\tIndex: " + indexName
+                              + "\n\tType: " + typeName
+                              + "\n\tTime taken to index: " + (System.currentTimeMillis() - startTime)/1000.0 
+                              +" seconds"
+                              +"\n===========================================");
+    
+              }
+        
+        
+              /**
+               *  This method processes failures by iterating through each bulk response item
+               *  @param response, a BulkResponse
+               **/
+              private void processFailure(BulkResponse response)
+              {
+                     logger.warn("There was failures when executing bulk : " + response.buildFailureMessage());
+                      if(logger.isDebugEnabled())
+                       {
+                         for(BulkItemResponse item: response.getItems())
+                         {
+                           if(item.isFailed())
+                           {
+                             logger.debug("Error {} occured on index {}, type {}, id {} for {} operation " 
+                                     , item.getFailureMessage(), item.getIndex(), item.getType(), item.getId()
+                                     , item.getOpType());
+                           } 
+                         }
+                      }
+                }
 
 	/**
 	 * Converts a map of results to a String JSON representation for it
@@ -976,7 +1059,7 @@ public class Harvester implements Runnable {
 	 * @return the JSON representation for the map, as a String
 	 */
 	private String mapToString(Map<String, ArrayList<String>> map) {
-		StringBuffer result = new StringBuffer("{");
+		StringBuilder result = new StringBuilder("{");
 		for(Map.Entry<String, ArrayList<String>> entry : map.entrySet()) {
 			ArrayList<String> value = entry.getValue();
 			if(value.size() == 1)
@@ -1063,8 +1146,7 @@ public class Harvester implements Runnable {
 	 * @return a String value, either a label for the parameter or its value
 	 * if no label is obtained from the endpoint
 	 */
-	private String getLabelForUri(String uri) {
-		String result = "";
+	private String getLabelForUri(String uri){
 		for(String prop:uriDescriptionList) {
 			String innerQuery = "SELECT ?r WHERE {<" + uri + "> <" +
 				prop + "> ?r } LIMIT 1";
@@ -1075,23 +1157,31 @@ public class Harvester implements Runnable {
 						rdfEndpoint,
 						query);
 				boolean keepTrying = true;
-				while(keepTrying) {
+                                int numberOfRetry = 0;
+                                
+                                //If the label is not available, retry querying the endpoint 5 times, 
+                                //if no response, simply return the uri instead of the label.
+				while(keepTrying && numberOfRetry < DEFAULT_NUMBER_OF_RETRY) 
+                                {
 					keepTrying = false;
 					try {
 						ResultSet results = qexec.execSelect();
 
-						if(results.hasNext()) {
+						if(results.hasNext()) 
+                                                {
 							QuerySolution sol = results.nextSolution();
-							result = EEASettings.parseForJson(
+							String result = EEASettings.parseForJson(
 									sol.getLiteral("r").getLexicalForm());
 							if(!result.isEmpty())
 								return result;
 						}
 					} catch(Exception e){
-						keepTrying = true;
-						logger.warn("Could not get label for uri {}. Retrying.",
+                                                keepTrying = true;
+                                                numberOfRetry++;
+						logger.warn("Could not get label for uri {}. Retrying...",
 									uri);
-					}finally { qexec.close();}
+                                                e.printStackTrace();
+				}finally { qexec.close();}
 				}
 			} catch (QueryParseException qpe) {
 				logger.error("Exception for query {}. The label cannot be obtained",

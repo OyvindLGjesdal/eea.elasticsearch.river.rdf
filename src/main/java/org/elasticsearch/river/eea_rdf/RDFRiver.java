@@ -15,11 +15,11 @@ import org.elasticsearch.river.RiverName;
 import org.elasticsearch.river.RiverSettings;
 
 import java.util.Map;
-import java.util.List;
+import java.util.ArrayList;
 
 /**
- *
- * @author iulia
+ * @author EEA, 
+ * Modified by Hemed, 30-01-2015
  *
  */
 public class RDFRiver extends AbstractRiverComponent implements River {
@@ -35,14 +35,16 @@ public class RDFRiver extends AbstractRiverComponent implements River {
 		harvester = new Harvester().client(client);
 
 		if (settings.settings().containsKey("eeaRDF")) {
-			Map<String, Object> eeaSettings = (Map<String, Object>)settings.
-													settings().get("eeaRDF");
+			Map<String, Object> eeaSettings = (Map<String, Object>)settings
+										        .settings().get("eeaRDF");
 
 			harvester
 				.rdfIndexType(XContentMapValues.nodeStringValue(
 							eeaSettings.get("indexType"), "full"))
 				.rdfStartTime(XContentMapValues.nodeStringValue(
 							eeaSettings.get("startTime"),""))
+                                .rdfNumberOfBulkActions(XContentMapValues.nodeLongValue(eeaSettings.get("bulkActions"), 
+                                                        EEASettings.DEFAULT_NUMBER_OF_BULK_ACTIONS))
 				.rdfUrl(XContentMapValues.nodeStringValue(
 							eeaSettings.get("uris"), "[]"))
 				.rdfEndpoint(XContentMapValues.nodeStringValue(
@@ -65,7 +67,7 @@ public class RDFRiver extends AbstractRiverComponent implements River {
 							EEASettings.DEFAULT_ADD_URI))
 				.rdfURIDescription(XContentMapValues.nodeStringValue(
 							eeaSettings.get("uriDescription"),
-							EEASettings.DEFAULT_URI_DESCRIPTION))
+							EEASettings.DEFAULT_URI_DESCRIPTION))                               
 				.rdfSyncConditions(XContentMapValues.nodeStringValue(
 							eeaSettings.get("syncConditions"),
 							EEASettings.DEFAULT_SYNC_COND))
@@ -75,14 +77,19 @@ public class RDFRiver extends AbstractRiverComponent implements River {
 				.rdfSyncOldData(XContentMapValues.nodeBooleanValue(
 							eeaSettings.get("syncOldData"),
 							EEASettings.DEFAULT_SYNC_OLD_DATA));
-
+                        
+                       
+                        //TO DO uriDescription has an issue, fix it if needs be.
+                        /**if(eeaSettings.containsKey("uriDescription")) 
+                        {
+		          harvester.rdfURIDescription((ArrayList<String>)eeaSettings.get("uriDescription"));
+			}**/
+                        
 			if(eeaSettings.containsKey("proplist")) {
-				harvester.rdfPropList((
-							List<String>)eeaSettings.get("proplist"));
+				harvester.rdfPropList((ArrayList<String>)eeaSettings.get("proplist"));
 			}
 			if(eeaSettings.containsKey("query")) {
-				harvester.rdfQuery((
-							List<String>)eeaSettings.get("query"));
+				harvester.rdfQuery((ArrayList<String>)eeaSettings.get("query"));
 			} else {
 				harvester.rdfQuery(EEASettings.DEFAULT_QUERIES);
 			}
