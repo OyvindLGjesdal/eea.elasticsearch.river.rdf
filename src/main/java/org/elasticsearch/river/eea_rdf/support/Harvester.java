@@ -871,7 +871,6 @@ public class Harvester implements Runnable {
                 long startTime = System.currentTimeMillis(); 
                 long bulkLength = 0;
 		HashSet<Property> properties = new HashSet<Property>();
-            
 		StmtIterator iter = model.listStatements();
 
 		while(iter.hasNext()) {
@@ -992,6 +991,7 @@ public class Harvester implements Runnable {
                         if(bulkLength % numberOfBulkActions == 0) 
                         {  
                           //logger.info("Now Indexing: " + bulkLength + " documents.");
+
                            BulkResponse bulkResponse = bulkRequest.execute().actionGet();
 
                            //After executing, flush the BulkRequestBuilder.
@@ -1005,7 +1005,6 @@ public class Harvester implements Runnable {
                         }
                     
 		  }
-                   
                      //Execute the remaining requests
                      if(bulkRequest.numberOfActions() > 0)
                      {
