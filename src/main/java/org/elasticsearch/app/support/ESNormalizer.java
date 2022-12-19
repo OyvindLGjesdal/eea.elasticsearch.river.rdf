@@ -4,8 +4,11 @@ package org.elasticsearch.app.support;
 import org.apache.jena.query.*;
 import org.apache.jena.rdf.model.*;*/
 
-import com.hp.hpl.jena.query.*;
-import com.hp.hpl.jena.rdf.model.*;
+import org.apache.jena.query.*;
+import org.apache.jena.rdf.model.*;
+import org.apache.jena.rdf.model.Model;
+import org.apache.jena.rdf.model.Property;
+import org.apache.jena.rdf.model.Resource;
 import org.elasticsearch.app.EEASettings;
 import org.elasticsearch.app.Harvester;
 import org.elasticsearch.app.debug.JSONMap;
