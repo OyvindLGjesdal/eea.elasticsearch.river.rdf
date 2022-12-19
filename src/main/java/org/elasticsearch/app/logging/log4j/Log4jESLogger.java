@@ -19,8 +19,10 @@
 
 package org.elasticsearch.app.logging.log4j;
 
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.elasticsearch.app.logging.support.AbstractESLogger;
 
 /**
@@ -28,7 +30,7 @@ import org.elasticsearch.app.logging.support.AbstractESLogger;
  */
 public class Log4jESLogger extends AbstractESLogger {
 
-    private final org.apache.log4j.Logger logger;
+    private final org.apache.logging.log4j.Logger logger;
     private final String FQCN = AbstractESLogger.class.getName();
 
     public Log4jESLogger(String prefix, Logger logger) {
@@ -41,19 +43,7 @@ public class Log4jESLogger extends AbstractESLogger {
     }
 
     public void setLevel(String level) {
-        if (level == null) {
-            logger.setLevel(null);
-        } else if ("error".equalsIgnoreCase(level)) {
-            logger.setLevel(Level.ERROR);
-        } else if ("warn".equalsIgnoreCase(level)) {
-            logger.setLevel(Level.WARN);
-        } else if ("info".equalsIgnoreCase(level)) {
-            logger.setLevel(Level.INFO);
-        } else if ("debug".equalsIgnoreCase(level)) {
-            logger.setLevel(Level.DEBUG);
-        } else if ("trace".equalsIgnoreCase(level)) {
-            logger.setLevel(Level.TRACE);
-        }
+        Configurator.setAllLevels(LogManager.getRootLogger().getName(), Level.toLevel(level));
     }
 
     @Override
@@ -86,12 +76,12 @@ public class Log4jESLogger extends AbstractESLogger {
 
     @Override
     public boolean isWarnEnabled() {
-        return logger.isEnabledFor(Level.WARN);
+        return logger.isEnabled(Level.WARN);
     }
 
     @Override
     public boolean isErrorEnabled() {
-        return logger.isEnabledFor(Level.ERROR);
+        return logger.isEnabled(Level.ERROR);
     }
 
     @Override

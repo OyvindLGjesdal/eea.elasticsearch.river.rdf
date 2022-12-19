@@ -19,9 +19,10 @@
 
 package org.elasticsearch.app.logging.log4j;
 
-import org.apache.log4j.Layout;
-import org.apache.log4j.WriterAppender;
-import org.apache.log4j.helpers.LogLog;
+import org.apache.logging.log4j.core.appender.AbstractWriterAppender;
+import org.apache.logging.log4j.core.layout.SyslogLayout;
+import org.apache.logging.log4j.core.appender.WriterAppender;
+//import org.apache.log4j.helpers;
 import org.elasticsearch.app.logging.Loggers;
 
 import java.io.IOException;
@@ -38,7 +39,7 @@ import java.io.OutputStream;
  * @author Curt Arnold
  * @since 1.1
  */
-public class ConsoleAppender extends WriterAppender {
+public class ConsoleAppender extends AbstractWriterAppender {
 
     public static final String SYSTEM_OUT = "System.out";
     public static final String SYSTEM_ERR = "System.err";
@@ -62,7 +63,7 @@ public class ConsoleAppender extends WriterAppender {
      *
      * @param layout layout, may not be null.
      */
-    public ConsoleAppender(Layout layout) {
+    public ConsoleAppender(SyslogLayout layout) {
         this(layout, SYSTEM_OUT);
     }
 
@@ -72,8 +73,8 @@ public class ConsoleAppender extends WriterAppender {
      * @param layout layout, may not be null.
      * @param target target, either "System.err" or "System.out".
      */
-    public ConsoleAppender(Layout layout, String target) {
-        setLayout(layout);
+    public ConsoleAppender(SyslogLayout layout, String target) {
+        //setLayout(layout);
         setTarget(target);
         activateOptions();
     }

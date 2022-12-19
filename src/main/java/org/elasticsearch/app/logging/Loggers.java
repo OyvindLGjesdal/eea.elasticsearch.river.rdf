@@ -38,7 +38,6 @@ import static java.util.Arrays.asList;
 /**
  * A set of utilities around Logging.
  *
- *
  */
 public class Loggers {
 
