@@ -10,18 +10,24 @@ import org.apache.jena.rdf.model.*;
 import org.apache.jena.sparql.ARQException;
 import org.apache.jena.sparql.engine.http.QueryExceptionHTTP;*/
 
-import com.hp.hpl.jena.graph.Graph;
-import com.hp.hpl.jena.graph.Node;
-import com.hp.hpl.jena.graph.NodeFactory;
-import com.hp.hpl.jena.graph.Triple;
-import com.hp.hpl.jena.query.*;
-import com.hp.hpl.jena.rdf.model.*;
-import com.hp.hpl.jena.sparql.ARQException;
-import com.hp.hpl.jena.sparql.engine.http.QueryExceptionHTTP;
+import org.apache.jena.graph.Graph;
+
+//import com.hp.hpl.jena.graph.Node;
+//import com.hp.hpl.jena.graph.NodeFactory;
+//import com.hp.hpl.jena.graph.Triple;
+import org.apache.jena.graph.Node;
+import org.apache.jena.graph.NodeFactory;
+import org.apache.jena.graph.Triple;
+import org.apache.jena.query.*;
+import org.apache.jena.rdf.model.*;
+//import com.hp.hpl.jena.sparql.ARQException;
+//import com.hp.hpl.jena.sparql.engine.http.QueryExceptionHTTP;
 import org.apache.jena.riot.RDFDataMgr;
 import org.apache.jena.riot.RDFLanguages;
 import org.apache.jena.riot.RiotException;
 
+import org.apache.jena.sparql.ARQException;
+import org.apache.jena.sparql.engine.http.QueryExceptionHTTP;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.ActionListener;
@@ -47,7 +53,7 @@ import org.elasticsearch.app.logging.Loggers;
 import org.elasticsearch.app.support.ESNormalizer;
 import org.elasticsearch.client.RestHighLevelClient;
 
-import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.Scroll;
@@ -61,8 +67,9 @@ import java.util.*;
 
 import java.util.concurrent.TimeUnit;
 
-import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
+//import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.elasticsearch.index.query.QueryBuilders.termQuery;
+import static org.elasticsearch.xcontent.XContentFactory.jsonBuilder;
 
 /**
  *
@@ -70,7 +77,7 @@ import static org.elasticsearch.index.query.QueryBuilders.termQuery;
  *
  */
 public class Harvester implements Runnable {
-	private static boolean DEBUG_TIME = false;
+	private static final boolean DEBUG_TIME = false;
 
 	private boolean synced = false;
 
@@ -96,7 +103,7 @@ public class Harvester implements Runnable {
 	private String startTime = "";
 
 	/* Harvest from uris options */
-	private Set<String> rdfUris = new HashSet<String>();
+	private Set<String> rdfUris = new HashSet<>();
 
 	/* Harvest from query options */
 	private List<String> rdfQueries = new ArrayList<String>();
@@ -557,7 +564,7 @@ public class Harvester implements Runnable {
 
         //TODO: move to async
         try {
-            BulkResponse bulkResponse = client.bulk(bulkRequest);
+            BulkResponse bulkResponse = client.bulk(bulkRequest,null);
 
             if(!bulkResponse.hasFailures() ){
 				for (BulkItemResponse bulkItemResponse : bulkResponse) {
@@ -584,8 +591,9 @@ public class Harvester implements Runnable {
 		GetRequest getRequest = new GetRequest(this.statusIndex, "last_update", riverName );
 
 		//TODO: move to async ?
+		// find out about options
 		try {
-			GetResponse getResponse = client.get(getRequest);
+			GetResponse getResponse = client.get(getRequest,null);
 
 			if(!getResponse.isSourceEmpty()){
 				Long updated = (Long) getResponse.getSource().get("updated_at");
@@ -610,9 +618,9 @@ public class Harvester implements Runnable {
 			searchRequest.source(searchSourceBuilder);
 
 			try {
-				SearchResponse searchResponse = client.search(searchRequest);
+				SearchResponse searchResponse = client.search(searchRequest,null);
 				SearchHits hits = searchResponse.getHits();
-				long totalHits = hits.getTotalHits();
+				long totalHits = hits.getTotalHits().value;
 				if(totalHits == 0 ){
 					indexer.close();
 				}
@@ -627,14 +635,6 @@ public class Harvester implements Runnable {
 	    while(!this.closed && !synced){
             long currentTime = System.currentTimeMillis();
 			boolean success = false;
-
-            /*SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
-            Long ts = Long.valueOf(0);
-            try {
-                ts = sdf.parse(startTime).getTime() / 1000;
-            } catch (ParseException e) {
-                e.printStackTrace();
-            }*/
 
             if ( startTime.isEmpty() ) startTime = getLastUpdate();
 
@@ -662,7 +662,7 @@ public class Harvester implements Runnable {
 				logger.info("TOTAL TIME:  {} ms", System.currentTimeMillis() - currentTime );
 				logger.info("===============================================================================");
 
-                client.deleteAsync(deleteRequest, new ActionListener<DeleteResponse>() {
+                client.deleteAsync(deleteRequest,null, new ActionListener<DeleteResponse>() {
                     @Override
                     public void onResponse(DeleteResponse deleteResponse) {
                         logger.info("Deleted river index entry: " + riverIndex + "/" + riverName);
@@ -882,7 +882,7 @@ public class Harvester implements Runnable {
 
 		SearchResponse searchResponse = null;
 		try {
-			searchResponse = client.search(searchRequest);
+			searchResponse = client.search(searchRequest, null);
 			String scrollId = searchResponse.getScrollId();
 			SearchHit[] searchHits = searchResponse.getHits().getHits();
 
@@ -905,7 +905,7 @@ public class Harvester implements Runnable {
 					continue;
 
 				DeleteRequest deleteRequest = new DeleteRequest(indexName, typeName, hit.getId());
-				DeleteResponse deleteResponse = client.delete(deleteRequest);
+				DeleteResponse deleteResponse = client.delete(deleteRequest, null);
 
 				ReplicationResponse.ShardInfo shardInfo = deleteResponse.getShardInfo();
 				if (shardInfo.getTotal() != shardInfo.getSuccessful()) {
@@ -925,7 +925,7 @@ public class Harvester implements Runnable {
 			while (searchHits != null && searchHits.length > 0) {
 				SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId);
 				scrollRequest.scroll(scroll);
-				searchResponse = client.searchScroll(scrollRequest);
+				searchResponse = client.searchScroll(scrollRequest, null);
 				scrollId = searchResponse.getScrollId();
 				searchHits = searchResponse.getHits().getHits();
 
@@ -947,7 +947,7 @@ public class Harvester implements Runnable {
 						continue;
 
 					DeleteRequest deleteRequest = new DeleteRequest(indexName, typeName, hit.getId());
-					DeleteResponse deleteResponse = client.delete(deleteRequest);
+					DeleteResponse deleteResponse = client.delete(deleteRequest, null);
 
 					ReplicationResponse.ShardInfo shardInfo = deleteResponse.getShardInfo();
 					if (shardInfo.getTotal() != shardInfo.getSuccessful()) {
@@ -967,7 +967,7 @@ public class Harvester implements Runnable {
 
 			ClearScrollRequest clearScrollRequest = new ClearScrollRequest();
 			clearScrollRequest.addScrollId(scrollId);
-			ClearScrollResponse clearScrollResponse = client.clearScroll(clearScrollRequest);
+			ClearScrollResponse clearScrollResponse = client.clearScroll(clearScrollRequest, null);
 			boolean succeeded = clearScrollResponse.isSucceeded();
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -990,7 +990,7 @@ public class Harvester implements Runnable {
 
 		GetRequest getRequest = new GetRequest(statusIndex, "last_update" , riverName);
 		try {
-			GetResponse getResponse = client.get(getRequest);
+			GetResponse getResponse = client.get(getRequest, null);
 			if(getResponse.getSource().get("status") == "indexing"){
 				indexing = true;
 			}
@@ -1004,7 +1004,7 @@ public class Harvester implements Runnable {
 			UpdateRequest request = new UpdateRequest( statusIndex, "last_update", riverName)
 					.doc(jsonMap);
 			try {
-				UpdateResponse updateResponse = client.update(request);
+				UpdateResponse updateResponse = client.update(request, null);
 				logger.info("Updating index {} status to: indexing", riverName);
 			} catch (IOException e) {
 				logger.error("{}", e);
@@ -1129,7 +1129,7 @@ public class Harvester implements Runnable {
 						try {
 							qExec.execConstruct(constructModel);
 						} catch (ARQException exc ){
-							logger.error("com.hp.hpl.jena.sparql.ARQException: [{}]", exc);
+							logger.error("org.apache.jena.sparql.ARQException: [{}]", exc);
 							return false;
 						}
 
@@ -1276,7 +1276,7 @@ public class Harvester implements Runnable {
 	private boolean checkRiverNotExists() {
 		GetRequest getRequest = new GetRequest(indexer.getRIVER_INDEX(), "river", riverName);
 		try {
-			GetResponse getResponse = client.get(getRequest);
+			GetResponse getResponse = client.get(getRequest, null);
 			if (getResponse.isExists()) {
 				return false;
 			} else {
@@ -1424,7 +1424,7 @@ public class Harvester implements Runnable {
 					addModelToES(model, bulkRequest, true);
 				}
 			} catch (QueryExceptionHTTP e) {
-				if (e.getResponseCode() >= 500) {
+				if (e.getStatusCode() >= 500) {
 					retry = true;
 					logger.error("Encountered an internal server error "
 					             + "while harvesting. Retrying!");
@@ -1612,7 +1612,7 @@ public class Harvester implements Runnable {
 
 				//TODO: make request async
 				try {
-					bulkResponse = client.bulk(bulkRequest);
+					bulkResponse = client.bulk(bulkRequest, null);
 				} catch (IOException e) {
 					e.printStackTrace();
 
@@ -1633,7 +1633,7 @@ public class Harvester implements Runnable {
 			//BulkResponse response = bulkRequest.execute().actionGet();
 			BulkResponse response = null;
 			try {
-				response = client.bulk(bulkRequest);
+				response = client.bulk(bulkRequest, null);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
@@ -1711,7 +1711,7 @@ public class Harvester implements Runnable {
 
 				//TODO: make request async
 				try {
-					bulkResponse = client.bulk(bulkRequest);
+					bulkResponse = client.bulk(bulkRequest, null);
 
 				} catch (IOException e) {
 					e.printStackTrace();
@@ -1733,7 +1733,7 @@ public class Harvester implements Runnable {
 			//BulkResponse response = bulkRequest.execute().actionGet();
 			BulkResponse response = null;
 			try {
-				response = client.bulk(bulkRequest);
+				response = client.bulk(bulkRequest, null);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}

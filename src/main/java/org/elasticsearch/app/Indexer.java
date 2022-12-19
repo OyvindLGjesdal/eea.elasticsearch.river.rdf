@@ -3,8 +3,8 @@ package  org.elasticsearch.app;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sun.org.apache.xpath.internal.operations.Bool;
-import jdk.nashorn.internal.parser.JSONParser;
+//import com.sun.org.apache.xpath.internal.operations.Bool;
+//import jdk.nashorn.internal.parser.JSONParser;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
@@ -21,7 +21,7 @@ import org.apache.http.util.EntityUtils;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ElasticsearchStatusException;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest;
-import org.elasticsearch.action.admin.indices.alias.IndicesAliasesResponse;
+//import org.elasticsearch.action.admin.indices.alias.IndicesAliasesResponse;
 import org.elasticsearch.action.admin.indices.alias.get.GetAliasesRequest;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
 
@@ -35,10 +35,11 @@ import org.elasticsearch.app.river.RiverName;
 import org.elasticsearch.app.river.RiverSettings;
 import org.elasticsearch.client.*;
 
-import org.elasticsearch.cluster.metadata.AliasMetaData;
+//import org.elasticsearch.cluster.metadata.AliasMetaData;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
-import org.elasticsearch.common.unit.TimeValue;
+//import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.support.XContentMapValues;
+import org.elasticsearch.core.TimeValue;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.Scroll;
 import org.elasticsearch.search.SearchHit;
@@ -121,7 +122,7 @@ public class Indexer {
 
             try {
                 DeleteIndexRequest request = new DeleteIndexRequest(indexer.RIVER_INDEX);
-                indexer.client.indices().delete(request);
+                indexer.client.indices().delete(request,null);
                 logger.info("Deleting river index!!!");
 
             } catch (ElasticsearchException exception) {
@@ -164,7 +165,7 @@ public class Indexer {
         String indexA = "";
 
         try {
-            response = lowclient.performRequest("GET", "global-search/_mappings");
+            response = lowclient.performRequest(new Request("GET", "global-search/_mappings"));
             String responseBody = EntityUtils.toString(response.getEntity());
 
             HashMap myMap = new HashMap<String, String>();
@@ -201,7 +202,12 @@ public class Indexer {
                         "]}";
 
                 HttpEntity entityR = new NStringEntity(jsonStringRemove, ContentType.APPLICATION_JSON);
-                Response responseRemove = lowclient.performRequest("POST", "/_aliases", params, entityR);
+                // build up request first loop on map, add request.setEntity, helper method?
+
+                Request otherRequest = new Request("POST", "/_aliases");
+                otherRequest.addParameters(params);
+                otherRequest.setEntity(entityR);
+                Response responseRemove = lowclient.performRequest(otherRequest);
 
                 if(responseRemove.getStatusLine().getStatusCode() == 200){
                     logger.info("{}", EntityUtils.toString(responseRemove.getEntity()) );
@@ -224,7 +230,10 @@ public class Indexer {
 
                 HttpEntity entityAdd = new NStringEntity(jsonStringAdd, ContentType.APPLICATION_JSON);
                 try {
-                    Response responseAdd = lowclient.performRequest("POST", "/_aliases", params, entityAdd);
+                    Request request = new Request("POST", "/_aliases");
+                    request.addParameters(params);
+                    request.setEntity(entityAdd);
+                    Response responseAdd = lowclient.performRequest(request);
 
                     if(responseAdd.getStatusLine().getStatusCode() == 200){
                         logger.info("{}", EntityUtils.toString(responseAdd.getEntity()) );
@@ -274,9 +283,9 @@ public class Indexer {
             })
             .setFailureListener(new RestClient.FailureListener(){
                 @Override
-                public void onFailure(HttpHost host) {
-                    super.onFailure(host);
-                    logger.error("Connection failure: [{}]", host);
+                public void onFailure(Node node) {
+                    super.onFailure(node);
+                    logger.error("Connection failure: [{}]", node);
                 }
             })
         );
@@ -309,7 +318,7 @@ public class Indexer {
         SearchResponse searchResponse = null;
         try {
             logger.info("{}",searchRequest);
-            searchResponse = client.search(searchRequest);
+            searchResponse = client.search(searchRequest, null);
             logger.info("River index {} found", this.RIVER_INDEX);
             String scrollId = searchResponse.getScrollId();
             SearchHit[] searchHits = searchResponse.getHits().getHits();
@@ -320,7 +329,7 @@ public class Indexer {
             while (searchHits != null && searchHits.length > 0) {
                 SearchScrollRequest scrollRequest = new SearchScrollRequest(scrollId);
                 scrollRequest.scroll(scroll);
-                searchResponse = client.searchScroll(scrollRequest);
+                searchResponse = client.searchScroll(scrollRequest, null);
                 scrollId = searchResponse.getScrollId();
                 searchHits = searchResponse.getHits().getHits();
 
@@ -330,7 +339,7 @@ public class Indexer {
 
             ClearScrollRequest clearScrollRequest = new ClearScrollRequest();
             clearScrollRequest.addScrollId(scrollId);
-            ClearScrollResponse clearScrollResponse = client.clearScroll(clearScrollRequest);
+            ClearScrollResponse clearScrollResponse = client.clearScroll(clearScrollRequest, null);
             boolean succeeded = clearScrollResponse.isSucceeded();
         } catch (IOException e) {
             logger.info("River index " + this.RIVER_INDEX + " not found");
